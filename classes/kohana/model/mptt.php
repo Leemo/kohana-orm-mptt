@@ -2,195 +2,136 @@
 /**
  * Modified Preorder Tree Traversal Class.
  *
- * @author     Alexey Popov
+ * @author     Alexey Poopov
  * @author     Kiall Mac Innes
  * @author     Mathew Davies
  * @author     Mike Parkin
- * @license    BSD
  * @copyright  (c) 2008-2011
- * @package    Model_MPTT
+ * @package    MODEL_MPTT
  */
-class Kohana_Model_MPTT extends ORM
+abstract class Kohana_Model_MPTT extends ORM
 {
 	/**
-	 * @access protected
-	 * @var string Left column name
+	 * Left column name
+	 *
+	 * @var string
 	 */
 	protected $_left_column = 'lft';
 
 	/**
-	 * @access protected
-	 * @var string Right column name
+	 * Right column name
+	 *
+	 * @var string
 	 */
 	protected $_right_column = 'rgt';
 
 	/**
-	 * @access protected
-	 * @var string Level column name
+	 * Level column name
+	 *
+	 * @var string
 	 */
 	protected $_level_column = 'lvl';
 
 	/**
-	 * @access protected
-	 * @var string Parent column name
+	 * Parent column name
+	 *
+	 * @var string
 	 */
 	protected $_parent_column = 'parent';
 
 	/**
-	 * @access protected
-	 * @var boolean Enable/Disable path calculation
+	 * Scope column name
+	 *
+	 * @var string
 	 */
-	protected $_path_calculation = FALSE;
+	protected $_scope_column = 'scope';
 
 	/**
-	 * @access protected
-	 * @var string Full pre-calculated path
+	 * Enable/Disable path calculation
+	 *
+	 * @var bool
+	 */
+	protected $_path_calculation_enabled = FALSE;
+
+	/**
+	 * Full pre-calculated path column
+	 *
+	 * @var string
 	 */
 	protected $_path_column = 'path';
 
 	/**
-	 * @access protected
-	 * @var string Single path element
+	 * Single path element
+	 *
+	 * @var string
 	 */
-	protected $_path_part_column = 'path_part';
+	protected $_path_part_column = 'part';
 
 	/**
-	 * @access protected
-	 * @var string Path separator
+	 * Path separator
+	 *
+	 * @var string
 	 */
 	protected $_path_separator = '/';
 
 	/**
-	 * @access protected
-	 * @var array Scope array
-	 */
-	protected $_scopes = array();
-
-	/**
-	 * Adding new condition to the scope array
+	 * New scope
+	 * This also double as a new_root method allowing
+	 * us to store multiple trees in the same table.
 	 *
-	 * @param string Row name
-	 * @param mixed Row value
-	 * @return Model_MPTT
+	 * @param   mixed    New scope to create
+	 * @param   array    Additional fields
+	 * @return  boolean
 	 */
-	public function scope($row, $val)
-	{
-		$prohibited = array
-		(
-			$this->_left_column,
-			$this->_right_column,
-			$this->_level_column,
-			$this->_parent_column,
-			$this->_path_column
-		);
-
-		if (in_array($row, $prohibited)) return FALSE;
-
-		$this->_scopes[$row] = $val;
-
-		return $this;
-	}
-
-	/**
-	 * New root creating
-	 *
-	 * @param array Additional fields array
-	 * @return Model_MPTT|boolean
-	 **/
-	public function new_root(array $additional_fields = NULL)
+	public function new_root($scope, array $fields = array())
 	{
 		// Make sure the specified scope doesn't already exist.
-		$search = $this->_apply_scopes(Model_MPTT::factory($this->_object_name))
-			->find_all();
+		$root = ORM::factory($this->_object_name)
+			->root($scope);
 
-		if ($search->count() > 0) return FALSE;
+		if ($root instanceof $this AND $root->loaded())
+		{
+			return $root;
+		}
 
 		// Create a new root node in the new scope.
-		$this->{$this->_left_column} = 1;
-		$this->{$this->_level_column} = 0;
-		$this->{$this->_parent_column} = 0;
+		$fields = Arr::merge($fields, array(
+			$this->_left_column   => 1,
+			$this->_right_column  => 2,
+			$this->_level_column  => 0,
+			$this->_parent_column => 0,
+			$this->_scope_column  => $scope
+			));
 
-		// Don't forget about scope columns
-		if (!empty($this->_scopes))
-		{
-			foreach ($this->_scopes as $key => $val)
-			{
-				$this->{$key} = $val;
-			}
-		}
-
-		// Other fields may be required
-		if ( ! empty($additional_fields))
-		{
-			// Don't give to sabotage the structure
-			$prohibited = array
-			(
-				$this->_left_column,
-				$this->_right_column,
-				$this->_level_column,
-				$this->_parent_column,
-				$this->_path_column
-			);
-
-			if ( ! empty($this->_scopes)) $prohibited = array_keys($this->_scopes) + $prohibited;
-
-			foreach ($additional_fields as $key => $val)
-			{
-				if ( ! in_array($key, $prohibited))
-				{
-					$this->{$key} = $val;
-				}
-			}
-		}
-
-		parent::save();
-
-		$this->{$this->_right_column} = $this->{$this->_primary_key} + 1;
-
-		parent::save();
-
-		return $this;
+		// Other fields may be required.
+		return $this
+			->values($fields)
+			->create();
 	}
 
 	/**
-	 * Locks table
+	 * Locks table.
 	 *
 	 * @access private
 	 */
 	protected function lock()
-	{return $this;
-		$lock = $this->_db->query(Database::SELECT, 'SELECT GET_LOCK("'.Kohana::$environment.'-'.$this->_table_name.'", 30) AS l', TRUE);
-
-		if ($lock['l']->l == 0)
-		{
-			return $this->lock(); // Unable to obtain lock, retry.
-		}
-		elseif ($lock['l']->l == 1)
-		{
-			return $this; // Success
-		}
-		else
-		{
-			throw new Kohana_Exception('Unable to obtain MPTT lock'); // Unknown Error handle this.. better
-		}
+	{
+		// Todo: Make it as it should be
+		return $this;
 	}
 
 	/**
 	 * Unlock table.
-	 *
-	 * @access private
 	 */
 	protected function unlock()
 	{
-		//$this->_db->query(Database::SELECT, 'SELECT RELEASE_LOCK("'.Kohana::$environment.'-'.$this->_table_name.'") AS l', TRUE);
-
+		// Todo: Make it as it should be
 		return $this;
 	}
 
 	/**
 	 * Does the current node have children?
 	 *
-	 * @access public
 	 * @return bool
 	 */
 	public function has_children()
@@ -201,7 +142,6 @@ class Kohana_Model_MPTT extends ORM
 	/**
 	 * Is the current node a leaf node?
 	 *
-	 * @access public
 	 * @return bool
 	 */
 	public function is_leaf()
@@ -212,19 +152,17 @@ class Kohana_Model_MPTT extends ORM
 	/**
 	 * Is the current node a descendant of the supplied node.
 	 *
-	 * @access public
-	 * @param Model_MPTT $target Target
-	 * @return bool
+	 * @param   Model_MPTT  Target node
+	 * @return  bool
 	 */
 	public function is_descendant($target)
 	{
-		return ($this->{$this->_left_column} > $target->{$this->_left_column} AND $this->{$this->_right_column} < $target->{$this->_right_column} /* AND $this->{$this->scope_column} = $target->{$this->scope_column}*/);
+		return ($this->{$this->_left_column} > $target->{$this->_left_column} AND $this->{$this->_right_column} < $target->{$this->_right_column} AND $this->{$this->_scope_column} = $target->{$this->_scope_column});
 	}
 
 	/**
 	 * Is the current node a direct child of the supplied node?
 	 *
-	 * @access public
 	 * @param Model_MPTT $target Target
 	 * @return bool
 	 */
@@ -277,10 +215,20 @@ class Kohana_Model_MPTT extends ORM
 	 * @access protected
 	 * @return Model_MPTT
 	 */
-	public function root()
+	public function root($scope = NULL)
 	{
-		return $this->_apply_scopes(Model_MPTT::factory($this->_object_name))
+		if ($scope === NULL AND $this->loaded())
+		{
+			$scope = $this->{$this->_scope_column};
+		}
+		elseif ($scope === NULL AND ! $this->loaded())
+		{
+			return FALSE;
+		}
+
+		return ORM::factory($this->_object_name)
 			->where($this->_left_column, '=', 1)
+			->where($this->_scope_column, '=', $scope)
 			->find();
 	}
 
@@ -292,39 +240,39 @@ class Kohana_Model_MPTT extends ORM
 	 */
 	public function parent()
 	{
-		return Model_MPTT::factory($this->_object_name, $this->{$this->_parent_column});
+		return $this->parents()->where($this->_level_column, '=', $this->{$this->_level_column} - 1);
 	}
 
 	/**
 	 * Returns the parents of the current node.
 	 *
-	 * @access public
-	 * @param bool $root include the root node?
-	 * @param string $direction direction to order the left column by.
-	 * @return Model_MPTT
+	 * @param   bool        Include the root node?
+	 * @param   string      Direction to order the left column by.
+	 * @return  Model_MPTT
 	 */
 	public function parents($root = TRUE, $direction = 'ASC')
 	{
-		$parents =  $this->_apply_scopes(Model_MPTT::factory($this->_object_name)
+		$parents =  ORM::factory($this->_object_name)
 			->where($this->_left_column, '<=', $this->{$this->_left_column})
 			->where($this->_right_column, '>=', $this->{$this->_right_column})
-			->where($this->_primary_key, '<>', $this->{$this->_primary_key}));
+			->where($this->_primary_key, '<>', $this->{$this->_primary_key})
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
+			->order_by($this->_left_column, $direction);
 
 		if ( ! $root)
 		{
-			$parents = $parents->where($this->_left_column, '!=', 1);
+			$parents->where($this->_left_column, '!=', 1);
 		}
 
-		return $parents->order_by($this->_left_column, $direction);
+		return $parents;
 	}
 
 	/**
 	 * Returns the children of the current node.
 	 *
-	 * @access public
-	 * @param bool $self include the current loaded node?
-	 * @param string $direction direction to order the left column by.
-	 * @return Model_MPTT
+	 * @param   bool       Include the current loaded node?
+	 * @param   string     Direction to order the left column by.
+	 * @return  Model_MPTT
 	 */
 	public function children($self = FALSE, $direction = 'ASC')
 	{
@@ -333,43 +281,48 @@ class Kohana_Model_MPTT extends ORM
 			return $this->descendants($self, $direction)->where($this->_level_column, '<=', $this->{$this->_level_column} + 1)->where($this->_level_column, '>=', $this->{$this->_level_column});
 		}
 
-		return $this->descendants($self, $direction)->where($this->_level_column, '=', $this->{$this->_level_column} + 1);
+		return ORM::factory($this->_object_name)
+			->where($this->_parent_column, '=', $this->pk())
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
+			->order_by($this->_left_column);
 	}
 
 	/**
 	 * Returns the descendants of the current node.
 	 *
-	 * @access public
-	 * @param bool $self include the current loaded node?
-	 * @param string $direction direction to order the left column by.
-	 * @return Model_MPTT
+	 * @param   bool        Include the current loaded node?
+	 * @param   string      Direction to order the left column by.
+	 * @return  Model_MPTT
 	 */
 	public function descendants($self = FALSE, $direction = 'ASC')
 	{
 		$left_operator = $self ? '>=' : '>';
 		$right_operator = $self ? '<=' : '<';
 
-		return Model_MPTT::factory($this->_object_name)
+		return ORM::factory($this->_object_name)
 			->where($this->_left_column, $left_operator, $this->{$this->_left_column})
 			->where($this->_right_column, $right_operator, $this->{$this->_right_column})
-			// ->where($this->scope_column, '=', $this->{$this->scope_column})
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
 			->order_by($this->_left_column, $direction);
 	}
 
 	/**
 	 * Returns the siblings of the current node
 	 *
-	 * @access public
-	 * @param bool $self include the current loaded node?
-	 * @param string $direction direction to order the left column by.
-	 * @return Model_MPTT
+	 * @param   bool       Include the current loaded node?
+	 * @param   string     Direction to order the left column by.
+	 * @return  Model_MPTT
 	 */
 	public function siblings($self = FALSE, $direction = 'ASC')
 	{
-		$siblings = Model_MPTT::factory($this->_object_name)
-			->where($this->_left_column, '>', $this->parent->find()->{$this->_left_column})
-			->where($this->_right_column, '<', $this->parent->find()->{$this->_right_column})
-			// ->where($this->scope_column, '=', $this->{$this->scope_column})
+		$parent = $this
+			->parent
+			->find();
+
+		$siblings = ORM::factory($this->_object_name)
+			->where($this->_left_column, '>', $parent->{$this->_left_column})
+			->where($this->_right_column, '<', $parent->{$this->_right_column})
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
 			->where($this->_level_column, '=', $this->{$this->_level_column})
 			->order_by($this->_left_column, $direction);
 
@@ -389,11 +342,11 @@ class Kohana_Model_MPTT extends ORM
 	 */
 	public function leaves()
 	{
-		return Model_MPTT::factory($this->_object_name)
-			->where($this->_left_column, '=', new Database_Expression('(`'.$this->_right_column.'` - 1)'))
+		return ORM::factory($this->_object_name)
+			->where($this->_left_column, '=', Db::expr('('.$this->_right_column.' - 1)'))
 			->where($this->_left_column, '>=', $this->{$this->_left_column})
 			->where($this->_right_column, '<=', $this->{$this->_right_column})
-			// ->where($this->scope_column, '=', $this->{$this->scope_column})
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
 			->order_by($this->_left_column, 'ASC');
 	}
 
@@ -411,20 +364,22 @@ class Kohana_Model_MPTT extends ORM
 	/**
 	 * Create a gap in the tree to make room for a new node
 	 *
-	 * @access private
 	 * @param integer $start start position.
 	 * @param integer $size the size of the gap (default is 2).
 	 */
-	private function _create_space($start, $size = 2)
+	protected function _create_space($start, $size = 2)
 	{
+		// Update the right values, then the left.
 		DB::update($this->_table_name)
-			->set(array($this->_right_column =>  DB::expr('"'.$this->_right_column.'" + '.$size)))
+			->set(array($this->_right_column =>  DB::expr($this->_right_column.' + '.$size)))
 			->where($this->_right_column, '>=', $start)
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
 			->execute($this->_db);
 
 		DB::update($this->_table_name)
-			->set(array($this->_left_column => DB::expr('"'.$this->_left_column.'" + '.$size)))
+			->set(array($this->_left_column => DB::expr($this->_left_column.' + '.$size)))
 			->where($this->_left_column, '>=', $start)
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
 			->execute($this->_db);
 	}
 
@@ -432,66 +387,58 @@ class Kohana_Model_MPTT extends ORM
 	 * Closes a gap in a tree. Mainly used after a node has
 	 * been removed.
 	 *
-	 * @access private
 	 * @param integer $start start position.
 	 * @param integer $size the size of the gap (default is 2).
 	 */
-	private function _delete_space($start, $size = 2)
+	protected function _delete_space($start, $size = 2)
 	{
+		// Update the left values, then the right.
 		DB::update($this->_table_name)
-			->set(array($this->_left_column => DB::expr('"'.$this->_left_column.'" - '.$size)))
+			->set(array($this->_left_column => DB::expr($this->_left_column.' - '.$size)))
 			->where($this->_left_column, '>', $start)
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
 			->execute($this->_db);
 
 		DB::update($this->_table_name)
-			->set(array($this->_right_column => DB::expr('"'.$this->_right_column.'" - '.$size)))
+			->set(array($this->_right_column => DB::expr($this->_right_column.' - '.$size)))
 			->where($this->_right_column, '>', $start)
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
 			->execute($this->_db);
 	}
 
 	/**
 	 * Insert a node
 	 */
-	protected function insert($target, $copy_left_from, $left_offset, $right_offset, $level_offset)
+	protected function _insert($target, $copy_left_from, $left_offset, $level_offset)
 	{
 		// Insert should only work on new nodes.. if its already it the tree it needs to be moved!
-		if ($this->loaded()) throw new Kohana_Exception('Cannot insert the same node twice');
-
-		// TO-DO
-		// if ($this->size() > 2) throw new Kohana_Exception('Cannot insert a node with children');
+		if ($this->loaded())
+			return FALSE;
 
 		$this->lock();
 
 		if ( ! $target instanceof $this)
 		{
-			$target = Model_MPTT::factory($this->_object_name, $target);
+			$target = ORM::factory($this->_object_name, $target);
 		}
 		else
 		{
-			// Ensure we're using the latest version of $target
-			$target->reload();
+			$target->reload(); // Ensure we're using the latest version of $target
 		}
 
 		$this->{$this->_left_column}   = $target->{$copy_left_from} + $left_offset;
-		$this->{$this->_right_column}  = $target->{$copy_left_from} + $right_offset;
+		$this->{$this->_right_column}  = $this->{$this->_left_column} + 1;
 		$this->{$this->_level_column}  = $target->{$this->_level_column} + $level_offset;
-		$this->{$this->_parent_column} = $target->{$this->_primary_key};
-
-		if ( ! empty($this->_scopes))
-		{
-			foreach ($this->_scopes as $key => $val)
-			{
-				$this->{$key} = $val;
-			}
-		}
-
-		parent::save();
+		$this->{$this->_parent_column} = $target->pk();
+		$this->{$this->_scope_column}  = $target->{$this->_scope_column};
 
 		$this->_create_space($this->{$this->_left_column});
 
-		if ($this->_path_calculation)
+		parent::save();
+
+		if ($this->_path_calculation_enabled)
 		{
-			$this->_update_path();
+			$this->update_path();
 			parent::save();
 		}
 
@@ -509,19 +456,19 @@ class Kohana_Model_MPTT extends ORM
 	 */
 	public function insert_as_first_child($target)
 	{
-		return $this->insert($target, $this->_left_column, 1, 1);
+		return $this->_insert($target, $this->_left_column, 1, 1);
 	}
 
 	/**
 	 * Inserts a new node to the right of the target node.
 	 *
 	 * @access public
-	 * @param Model_MPTT Target node id or Model_MPTT object.
+	 * @param Model_MPTT $target target node id or Model_MPTT object.
 	 * @return Model_MPTT
 	 */
 	public function insert_as_last_child($target)
 	{
-		return $this->insert($target, $this->_right_column, 0, 1, 1);
+		return $this->_insert($target, $this->_right_column, 0, 1);
 	}
 
 	/**
@@ -533,7 +480,7 @@ class Kohana_Model_MPTT extends ORM
 	 */
 	public function insert_as_prev_sibling($target)
 	{
-		return $this->insert($target, $this->_left_column, 0, 0);
+		return $this->_insert($target, $this->_left_column, 0, 0);
 	}
 
 	/**
@@ -545,21 +492,19 @@ class Kohana_Model_MPTT extends ORM
 	 */
 	public function insert_as_next_sibling($target)
 	{
-		return $this->insert($target, $this->_right_column, 1, 0);
+		return $this->_insert($target, $this->_right_column, 1, 0);
 	}
 
 	/**
 	 * Overloaded save method
 	 *
-	 * @access public
+	 * @param  Validation $validation Validation object
 	 * @return Model_MPTT|bool
 	 */
-	public function save()
+	public function save(Validation $validation = NULL)
 	{
 		if ($this->loaded() === TRUE)
-		{
-			return parent::save();
-		}
+			return parent::save($validation);
 
 		return FALSE;
 	}
@@ -568,7 +513,6 @@ class Kohana_Model_MPTT extends ORM
 	 * Removes a node and it's descendants.
 	 *
 	 * $usless_param prevents a strict error that breaks PHPUnit like hell!
-	 * @access public
 	 * @param bool $descendants remove the descendants?
 	 */
 	public function delete($usless_param = NULL)
@@ -578,8 +522,9 @@ class Kohana_Model_MPTT extends ORM
 		$result = DB::delete($this->_table_name)
 			->where($this->_left_column, '>=', $this->{$this->_left_column})
 			->where($this->_right_column, '<=', $this->{$this->_right_column})
-			// ->where($this->scope_column, '=', $this->{$this->scope_column})
+			->where($this->_scope_column, '=', $this->{$this->_scope_column})
 			->execute($this->_db);
+
 		if ($result > 0)
 		{
 			$this->_delete_space($this->{$this->_left_column}, $this->get_size());
@@ -626,8 +571,6 @@ class Kohana_Model_MPTT extends ORM
 
 		return parent::select_list($key, $val);
 	}
-
-
 
 	/**
 	 * Move to First Child
@@ -685,21 +628,22 @@ class Kohana_Model_MPTT extends ORM
 	 * Move
 	 *
 	 * @param Model_MPTT|integer $target target node id or Model_MPTT object.
-	 * @param bool $_left_column use the left column or right column from target
+	 * @param bool $left_column use the left column or right column from target
 	 * @param integer $left_offset left value for the new node position.
 	 * @param integer $level_offset level
 	 * @param bool allow this movement to be allowed on the root node
 	 */
-	protected function move($target, $_left_column, $left_offset, $level_offset, $allow_root_target)
+	protected function move($target, $left_column, $left_offset, $level_offset, $allow_root_target)
 	{
-		if ( ! $this->loaded()) return FALSE;
+		if (!$this->loaded())
+			return FALSE;
 
 		// Make sure we have the most upto date version of this AFTER we lock
 		$this->lock()->reload();
 
 		if ( ! $target instanceof $this)
 		{
-			$target = Model_MPTT::factory($this->_object_name, $target);
+			$target = ORM::factory($this->_object_name, $target);
 
 			if ( ! $target->loaded())
 			{
@@ -719,7 +663,7 @@ class Kohana_Model_MPTT extends ORM
 			return FALSE;
 		}
 
-		$left_offset = (($_left_column === TRUE) ? $target->{$this->_left_column} : $target->{$this->_right_column}) + $left_offset;
+		$left_offset = ($left_column === TRUE ? $target->{$this->_left_column} : $target->{$this->_right_column}) + $left_offset;
 		$level_offset = $target->{$this->_level_column} - $this->{$this->_level_column} + $level_offset;
 
 		$size = $this->get_size();
@@ -727,7 +671,7 @@ class Kohana_Model_MPTT extends ORM
 		$this->_create_space($left_offset, $size);
 
 		// if node is moved to a position in the tree "above" its current placement
-		// then its lft/rgt may have been altered by _create_space
+		// then its lft/rgt may have been altered by create_space
 		$this->reload();
 
 		$offset = ($left_offset - $this->{$this->_left_column});
@@ -735,15 +679,15 @@ class Kohana_Model_MPTT extends ORM
 		// Update the values.
 		$this->_db->query(Database::UPDATE, 'UPDATE '.$this->_table_name.' SET `'.$this->_left_column.'` = `'.$this->_left_column.'` + '.$offset.', `'.$this->_right_column.'` = `'.$this->_right_column.'` + '.$offset.'
 		, `'.$this->_level_column.'` = `'.$this->_level_column.'` + '.$level_offset.'
-		, `'.$this->scope_column.'` = '.$target->{$this->scope_column}.'
-		WHERE `'.$this->_left_column.'` >= '.$this->{$this->_left_column}.' AND `'.$this->_right_column.'` <= '.$this->{$this->_right_column}.' AND `'.$this->scope_column.'` = '.$this->{$this->scope_column}, FALSE);
+		, `'.$this->_scope_column.'` = '.$target->{$this->_scope_column}.'
+		WHERE `'.$this->_left_column.'` >= '.$this->{$this->_left_column}.' AND `'.$this->_right_column.'` <= '.$this->{$this->_right_column}.' AND `'.$this->_scope_column.'` = '.$this->{$this->_scope_column}, FALSE);
 
 		$this->_delete_space($this->{$this->_left_column}, $size);
 
 
-		if ($this->_path_calculation)
+		if ($this->_path_calculation_enabled)
 		{
-			$this->_update_path();
+			$this->update_path();
 			parent::save();
 		}
 
@@ -753,32 +697,19 @@ class Kohana_Model_MPTT extends ORM
 	}
 
 	/**
+	 * Magic
 	 *
-	 * @access public
-	 * @param $column - Which field to get.
-	 * @return mixed
+	 * @param   $column - Which field to get.
+	 * @return  mixed
 	 */
 	public function __get($column)
 	{
-		switch ($column)
+		if (in_array($column, array('parent', 'parents', 'children', 'siblings', 'root', 'leaves', 'descendants')))
 		{
-			case 'parent':
-				return $this->parent();
-			case 'parents':
-				return $this->parents();
-			case 'children':
-				return $this->children();
-			case 'siblings':
-				return $this->siblings();
-			case 'root':
-				return $this->root();
-			case 'leaves':
-				return $this->leaves();
-			case 'descendants':
-				return $this->descendants();
-			default:
-				return parent::__get($column);
+			return call_user_func(array($this, $column));
 		}
+
+		return parent::__get($column);
 	}
 
 	/**
@@ -788,115 +719,166 @@ class Kohana_Model_MPTT extends ORM
 	 *
 	 * @todo Look for any nodes no longer contained by the root node.
 	 * @todo Ensure every node has a path to the root via ->parents();
-	 * @access public
 	 * @return boolean
-	 */
+	 *
 	public function verify_tree()
 	{
-		foreach ($this->_get_scopes() as $scope)
+		// Select all scopes
+		foreach ($this->get_scopes() as $scope)
 		{
-			if ( ! $this->verify_scope($scope->{$this->scope_column})) return FALSE;
+			if ( ! $this->verify_scope($scope->{$this->_scope_column}))
+			{
+				return FALSE;
+			}
 		}
 
 		return TRUE;
 	}
-
+*/
 	/**
+	 * Returns all available scopes
 	 *
-	 * @return void
+	 * @return array
 	 */
-	private function _get_scopes()
+	public function get_scopes()
 	{
-		return DB::select('DISTINCT("'.implode('", "', array_keys($this->_scopes)).'")')
+		return DB::select($this->_scope_column)
 			->from($this->_table_name)
+			->group_by($this->_scope_column)
 			->execute($this->_db)
 			->as_array();
+
+		// TODO... redo this so its proper :P and open it public
+		// used by verify_tree()
+		//return $this->_db->query(Database::SELECT, 'SELECT DISTINCT(`'.$this->_scope_column.'`) from `'.$this->_table_name.'`', TRUE);
 	}
 
 	/**
+	 * Verifying error
 	 *
-	 * @param type $scope
-	 * @return type
+	 * @var array
 	 */
-	public function verify_scope($scope)
-	{ echo Kohana::debug($scope); die();
-		$root = $this->root($scope);
+	protected $_verify_error = array();
 
-		$end = $root->{$this->_right_column};
-		// TODO: Replace this to normal queries
-		// Find nodes that have slipped out of bounds.
-		//$result = $this->_db->query(Database::SELECT, 'SELECT COUNT(*) as count FROM `'.$this->_table_name.'` WHERE `'.$this->scope_column.'` = '.$root->{$this->scope_column}.' AND (`'.$this->_left_column.'` > '.$end.' OR `'.$this->_right_column.'` > '.$end.')', FALSE);
+	public function verify()
+	{
+		if ( ! $this->loaded())
+		{
+			return FALSE;
+		}
 
-		DB::select('COUNT("'.$this->_primary_key.'")', 'count')
-			->from($this->_table_name);
+		$scope = $this->{$this->_scope_column};
 
-		if ($result[0]->count > 0) return FALSE;
+		$root  = $this->root($scope);
+
+		$end   = $root->{$this->_right_column};
+
+		// Find nodes that have slipped out of bounds
+		$result = DB::select(DB::expr('COUNT(*) AS nodes'))
+			->from($this->_table_name)
+			->where($this->_scope_column, '=', $scope)
+			->where($this->_left_column, '>', $end)
+			->where($this->_right_column, '>', $end)
+			->execute($this->_db)
+			->get('nodes');
+
+		if ($result > 0)
+		{
+			$this->_verify_error = array
+			(
+				'title'       => __('Some nodes slipped out of bounds'),
+				'description' => __('Some nodes slipped out of bounds')
+			);
+
+			return FALSE;
+		}
 
 		// Find nodes that have the same left and right value
-		$result = $this->_db->query(Database::SELECT, 'SELECT COUNT(*) as count FROM `'.$this->_table_name.'` WHERE `'.$this->scope_column.'` = '.$root->{$this->scope_column}.' AND `'.$this->_left_column.'` = `'.$this->_right_column.'`', FALSE);
-		if ($result[0]->count > 0) return FALSE;
+		// and nodes that right value is less than the left value
+		$result = DB::select(DB::expr('COUNT(*) AS nodes'))
+			->from($this->_table_name)
+			->where($this->_left_column, '>=', DB::expr($this->_right_column))
+			->where($this->_scope_column, '=', $scope)
+			->execute($this->_db)
+			->get('nodes');
 
-		// Find nodes that right value is less than the left value
-		$result = $this->_db->query(Database::SELECT, 'SELECT COUNT(*) as count FROM `'.$this->_table_name.'` WHERE `'.$this->scope_column.'` = '.$root->{$this->scope_column}.' AND `'.$this->_left_column.'` > `'.$this->_right_column.'`', FALSE);
-		if ($result[0]->count > 0) return FALSE;
+		if ($result > 0)
+		{
+			$this->_verify_error = array(
+				'title'       => __('Disturbance of structure'),
+				'description' => ''
+			);
+
+			return FALSE;
+		}
 
 		// Make sure no 2 nodes share a left/right value
 		$i = 1;
 		while ($i <= $end)
 		{
-			$result = $this->_db->query(Database::SELECT, 'SELECT count(*) as count FROM `'.$this->_table_name.'` WHERE `'.$this->scope_column.'` = '.$root->{$this->scope_column}.' AND (`'.$this->_left_column.'` = '.$i.' OR `'.$this->_right_column.'` = '.$i.')', FALSE);
+			$result = DB::select(DB::expr('COUNT(*) AS nodes'))
+				->from($this->_table_name)
+				->or_where_open()
+				->or_where($this->_left_column, '=', $i)
+				->or_where($this->_right_column, '=', $i)
+				->or_where_close()
+				->where($this->_scope_column, '=', $scope)
+				->execute($this->_db)
+				->get('nodes');
 
-			if ($result[0]->count > 1)
+			if ($result > 1)
+			{
+				$this->_verify_error = array(
+					'title'       => __('Broken structure'),
+					'description' => __('There are nodes with the same values of left or right parameters')
+				);
+
 				return FALSE;
+			}
 
 			$i++;
 		}
 
 		// Check to ensure that all nodes have a "correct" level
-		// TODO
+		//TODO
 
 		return TRUE;
 	}
 
 	/**
-	 * @return Model_MPTT
+	 * Returns verify error text
+	 *
+	 * @return array|bool
 	 */
-	public function _update_path()
+	public function verify_error()
 	{
-		$path = array();
+		if ( ! $this->loaded() OR empty($this->_verify_error))
+		{
+			return FALSE;
+		}
 
-		$parents = $this->parents(FALSE)->find_all();
+		return $this->_verify_error;
+	}
+
+	public function update_path()
+	{
+		$path = '';
+
+		$parents = $this
+			->parents(FALSE)
+			->find_all();
 
 		foreach ($parents as $parent)
 		{
-			$path[] = trim($parent->{$this->_path_part_column});
+			$path .= $this->_path_separator.trim($parent->{$this->_path_part_column});
 		}
 
-		$path[] = trim($this->{$this->_path_part_column});
+		$path .= $this->_path_separator.trim($this->{$this->_path_part_column});
 
-		$path = implode($this->_path_separator, $path);
+		$path = trim($path, $this->_path_separator);
 
 		$this->{$this->_path_column} = $path;
 
 		return $this;
 	}
-
-	/**
-	 * Apply scopes
-	 *
-	 * @param Model_MPTT $model
-	 * @return type Model_MPTT
-	 */
-	private function _apply_scopes(Model_MPTT $model)
-	{
-		if ( ! empty($this->_scopes))
-		{
-			foreach ($this->_scopes as $key => $val)
-			{
-				$model = $model->where($key, '=', $val);
-			}
-		}
-
-		return $model;
-	}
-} // End Kohana_Model_MPTT
+}
