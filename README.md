@@ -18,6 +18,7 @@ Features
 
 - Kohana coding standards are apllied in this modules
 - Documentation included
+- New methods for tree manipulation
 
 Credits
 -------
