@@ -6,7 +6,7 @@
  * @author     Mathew Davies
  * @author     Mike Parkin
  * @copyright  (c) 2008-2010
- * @package    ORM_MPTT
+ * @package    Model_MPTT
  */
 abstract class Kohana_Model_MPTT extends ORM
 {
@@ -68,7 +68,7 @@ abstract class Kohana_Model_MPTT extends ORM
 	public function new_scope($scope, array $additional_fields = array())
 	{
 		// Make sure the specified scope doesn't already exist.
-		$search = ORM_MPTT::factory($this->_object_name)->where($this->scope_column, '=', $scope)->find_all();
+		$search = Model_MPTT::factory($this->_object_name)->where($this->scope_column, '=', $scope)->find_all();
 
 		if ($search->count() > 0 )
 			return FALSE;
@@ -148,7 +148,7 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Is the current node a descendant of the supplied node.
 	 *
 	 * @access public
-	 * @param ORM_MPTT $target Target
+	 * @param Model_MPTT $target Target
 	 * @return bool
 	 */
 	public function is_descendant($target)
@@ -160,7 +160,7 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Is the current node a direct child of the supplied node?
 	 *
 	 * @access public
-	 * @param ORM_MPTT $target Target
+	 * @param Model_MPTT $target Target
 	 * @return bool
 	 */
 	public function is_child($target)
@@ -172,7 +172,7 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Is the current node the direct parent of the supplied node?
 	 *
 	 * @access public
-	 * @param ORM_MPTT $target Target
+	 * @param Model_MPTT $target Target
 	 * @return bool
 	 */
 	public function is_parent($target)
@@ -184,7 +184,7 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Is the current node a sibling of the supplied node
 	 *
 	 * @access public
-	 * @param ORM_MPTT $target Target
+	 * @param Model_MPTT $target Target
 	 * @return bool
 	 */
 	public function is_sibling($target)
@@ -210,7 +210,7 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Returns the root node.
 	 *
 	 * @access protected
-	 * @return ORM_MPTT
+	 * @return Model_MPTT
 	 */
 	public function root($scope = NULL)
 	{
@@ -223,14 +223,14 @@ abstract class Kohana_Model_MPTT extends ORM
 			return FALSE;
 		}
 
-		return ORM_MPTT::factory($this->_object_name)->where($this->left_column, '=', 1)->where($this->scope_column, '=', $scope);
+		return Model_MPTT::factory($this->_object_name)->where($this->left_column, '=', 1)->where($this->scope_column, '=', $scope);
 	}
 
 	/**
 	 * Returns the parent of the current node.
 	 *
 	 * @access public
-	 * @return ORM_MPTT
+	 * @return Model_MPTT
 	 */
 	public function parent()
 	{
@@ -243,11 +243,11 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * @access public
 	 * @param bool $root include the root node?
 	 * @param string $direction direction to order the left column by.
-	 * @return ORM_MPTT
+	 * @return Model_MPTT
 	 */
 	public function parents($root = TRUE, $direction = 'ASC')
 	{
-		$parents =  ORM_MPTT::factory($this->_object_name)
+		$parents =  Model_MPTT::factory($this->_object_name)
 			->where($this->left_column, '<=', $this->{$this->left_column})
 			->where($this->right_column, '>=', $this->{$this->right_column})
 			->where($this->_primary_key, '<>', $this->{$this->_primary_key})
@@ -268,7 +268,7 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * @access public
 	 * @param bool $self include the current loaded node?
 	 * @param string $direction direction to order the left column by.
-	 * @return ORM_MPTT
+	 * @return Model_MPTT
 	 */
 	public function children($self = FALSE, $direction = 'ASC')
 	{
@@ -286,14 +286,14 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * @access public
 	 * @param bool $self include the current loaded node?
 	 * @param string $direction direction to order the left column by.
-	 * @return ORM_MPTT
+	 * @return Model_MPTT
 	 */
 	public function descendants($self = FALSE, $direction = 'ASC')
 	{
 		$left_operator = $self ? '>=' : '>';
 		$right_operator = $self ? '<=' : '<';
 
-		return ORM_MPTT::factory($this->_object_name)
+		return Model_MPTT::factory($this->_object_name)
 			->where($this->left_column, $left_operator, $this->{$this->left_column})
 			->where($this->right_column, $right_operator, $this->{$this->right_column})
 			->where($this->scope_column, '=', $this->{$this->scope_column})
@@ -306,11 +306,11 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * @access public
 	 * @param bool $self include the current loaded node?
 	 * @param string $direction direction to order the left column by.
-	 * @return ORM_MPTT
+	 * @return Model_MPTT
 	 */
 	public function siblings($self = FALSE, $direction = 'ASC')
 	{
-		$siblings = ORM_MPTT::factory($this->_object_name)
+		$siblings = Model_MPTT::factory($this->_object_name)
 			->where($this->left_column, '>', $this->parent->find()->{$this->left_column})
 			->where($this->right_column, '<', $this->parent->find()->{$this->right_column})
 			->where($this->scope_column, '=', $this->{$this->scope_column})
@@ -329,11 +329,11 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Returns leaves under the current node.
 	 *
 	 * @access public
-	 * @return ORM_MPTT
+	 * @return Model_MPTT
 	 */
 	public function leaves()
 	{
-		return ORM_MPTT::factory($this->_object_name)
+		return Model_MPTT::factory($this->_object_name)
 			->where($this->left_column, '=', new Database_Expression('(`'.$this->right_column.'` - 1)'))
 			->where($this->left_column, '>=', $this->{$this->left_column})
 			->where($this->right_column, '<=', $this->{$this->right_column})
@@ -398,7 +398,7 @@ abstract class Kohana_Model_MPTT extends ORM
 
 		if ( ! $target instanceof $this)
 		{
-			$target = ORM_MPTT::factory($this->_object_name, $target);
+			$target = Model_MPTT::factory($this->_object_name, $target);
 		}
 		else
 		{
@@ -429,8 +429,8 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Inserts a new node to the left of the target node.
 	 *
 	 * @access public
-	 * @param ORM_MPTT $target target node id or ORM_MPTT object.
-	 * @return ORM_MPTT
+	 * @param Model_MPTT $target target node id or Model_MPTT object.
+	 * @return Model_MPTT
 	 */
 	public function insert_as_first_child($target)
 	{
@@ -441,8 +441,8 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Inserts a new node to the right of the target node.
 	 *
 	 * @access public
-	 * @param ORM_MPTT $target target node id or ORM_MPTT object.
-	 * @return ORM_MPTT
+	 * @param Model_MPTT $target target node id or Model_MPTT object.
+	 * @return Model_MPTT
 	 */
 	public function insert_as_last_child($target)
 	{
@@ -453,8 +453,8 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Inserts a new node as a previous sibling of the target node.
 	 *
 	 * @access public
-	 * @param ORM_MPTT|integer $target target node id or ORM_MPTT object.
-	 * @return ORM_MPTT
+	 * @param Model_MPTT|integer $target target node id or Model_MPTT object.
+	 * @return Model_MPTT
 	 */
 	public function insert_as_prev_sibling($target)
 	{
@@ -465,8 +465,8 @@ abstract class Kohana_Model_MPTT extends ORM
 	 * Inserts a new node as the next sibling of the target node.
 	 *
 	 * @access public
-	 * @param ORM_MPTT|integer $target target node id or ORM_MPTT object.
-	 * @return ORM_MPTT
+	 * @param Model_MPTT|integer $target target node id or Model_MPTT object.
+	 * @return Model_MPTT
 	 */
 	public function insert_as_next_sibling($target)
 	{
@@ -560,8 +560,8 @@ abstract class Kohana_Model_MPTT extends ORM
 	 *
 	 * Moves the current node to the first child of the target node.
 	 *
-	 * @param ORM_MPTT|integer $target target node id or ORM_MPTT object.
-	 * @return ORM_MPTT
+	 * @param Model_MPTT|integer $target target node id or Model_MPTT object.
+	 * @return Model_MPTT
 	 */
 	public function move_to_first_child($target)
 	{
@@ -573,8 +573,8 @@ abstract class Kohana_Model_MPTT extends ORM
 	 *
 	 * Moves the current node to the last child of the target node.
 	 *
-	 * @param ORM_MPTT|integer $target target node id or ORM_MPTT object.
-	 * @return ORM_MPTT
+	 * @param Model_MPTT|integer $target target node id or Model_MPTT object.
+	 * @return Model_MPTT
 	 */
 	public function move_to_last_child($target)
 	{
@@ -586,8 +586,8 @@ abstract class Kohana_Model_MPTT extends ORM
 	 *
 	 * Moves the current node to the previous sibling of the target node.
 	 *
-	 * @param ORM_MPTT|integer $target target node id or ORM_MPTT object.
-	 * @return ORM_MPTT
+	 * @param Model_MPTT|integer $target target node id or Model_MPTT object.
+	 * @return Model_MPTT
 	 */
 	public function move_to_prev_sibling($target)
 	{
@@ -599,8 +599,8 @@ abstract class Kohana_Model_MPTT extends ORM
 	 *
 	 * Moves the current node to the next sibling of the target node.
 	 *
-	 * @param ORM_MPTT|integer $target target node id or ORM_MPTT object.
-	 * @return ORM_MPTT
+	 * @param Model_MPTT|integer $target target node id or Model_MPTT object.
+	 * @return Model_MPTT
 	 */
 	public function move_to_next_sibling($target)
 	{
@@ -610,7 +610,7 @@ abstract class Kohana_Model_MPTT extends ORM
 	/**
 	 * Move
 	 *
-	 * @param ORM_MPTT|integer $target target node id or ORM_MPTT object.
+	 * @param Model_MPTT|integer $target target node id or Model_MPTT object.
 	 * @param bool $left_column use the left column or right column from target
 	 * @param integer $left_offset left value for the new node position.
 	 * @param integer $level_offset level
@@ -626,7 +626,7 @@ abstract class Kohana_Model_MPTT extends ORM
 
 		if ( ! $target instanceof $this)
 		{
-			$target = ORM_MPTT::factory($this->_object_name, $target);
+			$target = Model_MPTT::factory($this->_object_name, $target);
 
 			if ( ! $target->loaded())
 			{
